@@ -1,0 +1,50 @@
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{col, from_json}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+
+
+object  PracticaFinalFilter {
+  def main(args:Array[String]):Unit={
+
+    /*Establecemos la conexión utilizando el SparkSession, dando nombre a la app
+    y utilizando 2 local para que se produzca el streaming.*/
+    val spark=SparkSession.builder().appName("Practica1").master("local[2]").getOrCreate()
+
+    //Lectura en streaming con formato kafka.
+    val df=spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "localhost:9092")
+      .option("subscribe","topicprueba4")
+      .option("startingOffSets","earliest")
+      .load()
+
+    /*El formato kafka no es legible, por lo que debemos hacer un casteo
+    de todos los datos para convertirlo en algo legible, en este caso en String.*/
+    val res=df.selectExpr("CAST(value AS STRING)")
+
+    //Creamos la estructura que queremos que tenga ese esquema
+    val schema= new StructType().add("id",IntegerType)
+      .add("first_name",StringType)
+      .add("last_name",StringType)
+      .add("email",StringType)
+      .add("gender",StringType)
+      .add("ip_address",StringType)
+
+    /*Hacer que el res y el esquema sean legibles. Vamos a recibir
+    un casteo de algo que tiene formato json, aplicale el esuqema y dale un alias.*/
+    val persona=res.select(from_json(col("value"),schema).as("data"))
+      .select("data.*")
+      print("Mostrar datos por consola")
+
+    /*Realizamos una consulta con una transformacion, en este caso con un filter para que nos elimine
+    los registros de las siguientes personas*/
+    val filtrado= persona.filter(col("first_name").notEqual("Noell") && col("first_name").notEqual("Giavani"))
+
+    //Queremos que nos escriba la consulta que acabamos de realizar por consola
+    val query=filtrado.writeStream
+      .format("console")
+      .outputMode("append")
+      .start()
+      .awaitTermination()
+  }
+}
